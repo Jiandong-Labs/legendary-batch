@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: legendary-batch
+  datasource:
+    url: ${postgres_url}/legendary_batch
+    username: ${postgres_user}
+    password:  ${postgres_pwd}
+  batch:
+    jdbc:
+#      initialize-schema: never  # never auto create batch related tables
+#    job:
+#      enabled: false
