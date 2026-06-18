@@ -5,7 +5,7 @@ import java.util.concurrent.CountDownLatch;
 
 import com.jiandong.legendarybatch.config.BatchConfig;
 import com.jiandong.legendarybatch.container.PostgresContainerTest;
-import com.jiandong.legendarybatch.container.PostgresDataSourceConfig;
+import com.jiandong.legendarybatch.support.DataSourceConfig;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -16,24 +16,15 @@ import org.springframework.batch.core.job.parameters.JobParameters;
 import org.springframework.batch.core.job.parameters.JobParametersBuilder;
 import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.batch.autoconfigure.JobExecutionEvent;
-import org.springframework.boot.jdbc.autoconfigure.JdbcClientAutoConfiguration;
-import org.springframework.boot.jdbc.autoconfigure.JdbcTemplateAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-@SpringBootTest(classes = {
-		CsvFileImportJobConfig.class,
-		BatchConfig.class,
-		PostgresDataSourceConfig.class,
-})
-@ImportAutoConfiguration(classes = {
-		JdbcTemplateAutoConfiguration.class,
-		JdbcClientAutoConfiguration.class,
-})
+@SpringBootTest(classes = {CsvFileImportJobConfig.class, BatchConfig.class})
+@Import(DataSourceConfig.class)
 class CsvFileImportJobConfigTest implements PostgresContainerTest {
 
 	@Autowired ConfigurableApplicationContext applicationContext;
