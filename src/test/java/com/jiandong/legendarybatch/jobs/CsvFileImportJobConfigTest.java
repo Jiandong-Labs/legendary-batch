@@ -1,7 +1,11 @@
 package com.jiandong.legendarybatch.jobs;
 
+import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
+
+import com.jiandong.legendarybatch.config.BatchConfig;
 import com.jiandong.legendarybatch.container.PostgresContainerTest;
-import com.jiandong.legendarybatch.container.PostgresDataSourceConfiguration;
+import com.jiandong.legendarybatch.container.PostgresDataSourceConfig;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -12,50 +16,64 @@ import org.springframework.batch.core.job.parameters.JobParameters;
 import org.springframework.batch.core.job.parameters.JobParametersBuilder;
 import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
-import org.springframework.boot.batch.autoconfigure.BatchAutoConfiguration;
-import org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration;
+import org.springframework.boot.batch.autoconfigure.JobExecutionEvent;
 import org.springframework.boot.jdbc.autoconfigure.JdbcClientAutoConfiguration;
 import org.springframework.boot.jdbc.autoconfigure.JdbcTemplateAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationListener;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-
-@SpringBootTest(classes = {CsvFileImportJob.class})
-@ImportAutoConfiguration(classes = {
-		PostgresDataSourceConfiguration.class, DataSourceTransactionManagerAutoConfiguration.class,
-		BatchAutoConfiguration.class,
-		JdbcTemplateAutoConfiguration.class, JdbcClientAutoConfiguration.class,
+@SpringBootTest(classes = {
+		CsvFileImportJobConfig.class,
+		BatchConfig.class,
+		PostgresDataSourceConfig.class,
 })
-class CsvFileImportJobTest implements PostgresContainerTest {
+@ImportAutoConfiguration(classes = {
+		JdbcTemplateAutoConfiguration.class,
+		JdbcClientAutoConfiguration.class,
+})
+class CsvFileImportJobConfigTest implements PostgresContainerTest {
 
-	@Autowired @Qualifier("CsvJob") Job csvFileImportJob;
+	@Autowired ConfigurableApplicationContext applicationContext;
+
+	@Autowired Job csvFileImportJob;
 
 	@Autowired JobOperator jobOperator;
 
-	@Autowired JdbcClient jdbcClient; // for verifying job results
+	@Autowired JdbcClient jdbcClient;
 
 	@Test
 	void happyScenario() throws Exception {
+		// listen
+		CountDownLatch latch = new CountDownLatch(1);
+
+		applicationContext.addApplicationListener((ApplicationListener<JobExecutionEvent>) event -> {
+			if (event.getJobExecution().getJobInstance().getJobName().equals("csvFileImportJob")) {
+				latch.countDown();
+			}
+		});
+
 		// Given
 		JobParameters jobParameters = new JobParametersBuilder()
 				.addString("csvFilePath", "src/test/resources/batch/batch-data.csv")
 				.toJobParameters();
-		// When
 		JobExecution jobExecution = jobOperator.start(csvFileImportJob, jobParameters);
-		// wait to be completed
-		while (jobExecution.getStatus() != BatchStatus.COMPLETED) {
-			Thread.sleep(500);
-		}
+
+		// Wait
+		latch.await();
+
 		// Then
+		Assertions.assertThat(jobExecution.getStatus()).isEqualTo(BatchStatus.COMPLETED);
+
 		var personList = jdbcClient.sql("select * from employee")
-				.query(CsvFileImportJob.Employee.class)
+				.query(CsvFileImportJobConfig.Employee.class)
 				.list();
 		Assertions.assertThat(personList)
 				.hasSize(5)
 				.last()
-				.extracting(employee -> employee.firstName())
+				.extracting(employee -> Objects.requireNonNull(employee).firstName())
 				.isEqualTo("E");
 	}
 

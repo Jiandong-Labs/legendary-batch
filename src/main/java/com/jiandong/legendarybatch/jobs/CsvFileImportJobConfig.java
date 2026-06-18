@@ -23,45 +23,48 @@ import org.springframework.batch.infrastructure.item.database.builder.JdbcBatchI
 import org.springframework.batch.infrastructure.item.file.FlatFileItemReader;
 import org.springframework.batch.infrastructure.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.batch.autoconfigure.JobExecutionEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.transaction.PlatformTransactionManager;
 
-@Configuration
-public class CsvFileImportJob {
+@Configuration(proxyBeanMethods = false)
+class CsvFileImportJobConfig {
 
-	private static final Logger log = LoggerFactory.getLogger(CsvFileImportJob.class);
+	private static final Logger log = LoggerFactory.getLogger(CsvFileImportJobConfig.class);
 
 	private final PlatformTransactionManager transactionManager;
 
 	private final DataSource dataSource;
 
-	public CsvFileImportJob(PlatformTransactionManager transactionManager, DataSource dataSource) {
+	public CsvFileImportJobConfig(PlatformTransactionManager transactionManager, DataSource dataSource) {
 		this.transactionManager = transactionManager;
 		this.dataSource = dataSource;
 	}
 
-	@Bean(name = "CsvJob")
-	public Job csvFileImportJob(JobRepository jobRepository, FlatFileItemReader<Employee> csvItemReader) {
-		return new JobBuilder("CsvFileJobBuilder", jobRepository)
+	@Bean
+	Job csvFileImportJob(JobRepository jobRepository, FlatFileItemReader<Employee> csvItemReader,
+			ItemProcessor<Employee, Employee> csvItemProcessor, ItemWriter<Employee> csvItemWriter,
+			JobExecutionListener csvFileListener) {
+
+		return new JobBuilder("csvFileImportJob", jobRepository)
 				.preventRestart()
-				.start(new StepBuilder("CsvFileStepBuilder", jobRepository)
+				.start(new StepBuilder("csvFileImportStep", jobRepository)
 						.<Employee, Employee>chunk(1)
 						.reader(csvItemReader)
-						.processor(csvItemProcessor())
-						.writer(csvItemWriter())
+						.processor(csvItemProcessor)
+						.writer(csvItemWriter)
 						.transactionManager(transactionManager)
 						.build())
-				.listener(csvFileListener())
+				.listener(csvFileListener)
 				.build();
 	}
 
 	@Bean
 	@StepScope
-	public FlatFileItemReader<Employee> csvItemReader(@Value("#{jobParameters['csvFilePath']}") String csvFilePath) {
-//	public FlatFileItemReader<Employee> csvItemReader() {
-//		String csvFilePath = "src/test/resources/batch/batch-data.csv";
+	FlatFileItemReader<Employee> csvItemReader(@Value("#{jobParameters['csvFilePath']}") String csvFilePath) {
 		FileSystemResource resource = new FileSystemResource(csvFilePath);
 		return new FlatFileItemReaderBuilder<Employee>()
 				.resource(resource)
@@ -79,7 +82,7 @@ public class CsvFileImportJob {
 	}
 
 	@Bean
-	public JobExecutionListener csvFileListener() {
+	public JobExecutionListener csvFileListener(ApplicationEventPublisher eventPublisher) {
 		return new JobExecutionListener() {
 
 			@Override
@@ -91,6 +94,7 @@ public class CsvFileImportJob {
 			public void afterJob(JobExecution jobExecution) {
 				StepExecution[] stepExecutions = jobExecution.getStepExecutions().toArray(new StepExecution[] {});
 				log.info("after job ..., readCount: {}", stepExecutions[0].getReadCount());
+				eventPublisher.publishEvent(new JobExecutionEvent(jobExecution));
 			}
 		};
 	}
@@ -103,7 +107,7 @@ public class CsvFileImportJob {
 
 			Employee transformedEmployee = new Employee(firstName, lastName);
 
-			log.info("Converting (" + employee + ") into (" + transformedEmployee + ")");
+			log.info("Converting ({}) into ({})", employee, transformedEmployee);
 
 			return transformedEmployee;
 		};

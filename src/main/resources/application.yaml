@@ -6,7 +6,5 @@ spring:
     username: ${postgres_user}
     password:  ${postgres_pwd}
   batch:
-    jdbc:
-#      initialize-schema: never  # never auto create batch related tables
-#    job:
-#      enabled: false
+    job:
+      enabled: false
